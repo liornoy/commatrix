@@ -1,2 +1,2 @@
-e2etest/artifacts/*
-!e2etest/artifacts/.gitkeep
+communication-matrix/*
+commatrix-gen

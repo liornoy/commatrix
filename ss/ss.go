@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/openshift-kni/commatrix/client"
@@ -18,7 +19,6 @@ import (
 )
 
 const (
-	processeNameFieldIdx  = 5
 	localAddrPortFieldIdx = 3
 	interval              = time.Millisecond * 500
 	duration              = time.Second * 5
@@ -70,11 +70,11 @@ func CreateComDetailsFromNode(cs *client.ClientSet, node *corev1.Node, tcpFile, 
 		return nil, fmt.Errorf("failed writing to file: %s", err)
 	}
 
-	tcpComDetails, err := toComDetails(ssOutFilteredTCP, "TCP", node)
+	tcpComDetails, err := toComDetails(debugPod, ssOutFilteredTCP, "TCP", node)
 	if err != nil {
 		return nil, err
 	}
-	udpComDetails, err := toComDetails(ssOutFilteredUDP, "UDP", node)
+	udpComDetails, err := toComDetails(debugPod, ssOutFilteredUDP, "UDP", node)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func splitByLines(bytes []byte) []string {
 	return strings.Split(str, "\n")
 }
 
-func toComDetails(ssOutput []string, protocol string, node *corev1.Node) ([]types.ComDetails, error) {
+func toComDetails(debugPod *debug.DebugPod, ssOutput []string, protocol string, node *corev1.Node) ([]types.ComDetails, error) {
 	res := make([]types.ComDetails, 0)
 	nodeRoles := nodes.GetRole(node)
 
@@ -100,6 +100,12 @@ func toComDetails(ssOutput []string, protocol string, node *corev1.Node) ([]type
 		if err != nil {
 			return nil, err
 		}
+		name, err := identifyContainerForPort(debugPod, ssEntry)
+		if err != nil {
+			log.Debugf("failed to identify container for ss entry: %serr: %s", ssEntry, err)
+		}
+
+		cd.Container = name
 		cd.Protocol = protocol
 		cd.NodeRole = nodeRoles
 		cd.Optional = false

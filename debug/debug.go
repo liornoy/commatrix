@@ -9,6 +9,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	errutil "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/utils/ptr"
@@ -202,8 +203,6 @@ func getPodDefinition(node string, namespace string, image string) *corev1.Pod {
 			Priority:                      ptr.To[int32](1000000000),
 			PriorityClassName:             "openshift-user-critical",
 			RestartPolicy:                 corev1.RestartPolicyNever,
-			SchedulerName:                 "default-scheduler",
-			ServiceAccountName:            "default",
 			TerminationGracePeriodSeconds: ptr.To[int64](30),
 			Tolerations: []corev1.Toleration{
 				{
@@ -291,7 +290,7 @@ func getPodDefinition(node string, namespace string, image string) *corev1.Pod {
 
 func createNamespace(cs *client.ClientSet, namespace string) error {
 	_, err := cs.Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
-	if err != nil && !strings.Contains(err.Error(), "not found") {
+	if err != nil && !errutil.IsNotFound(err) {
 		return fmt.Errorf("failed checking if namespace %s already exists: %v", namespace, err)
 	}
 
@@ -311,24 +310,11 @@ func createNamespace(cs *client.ClientSet, namespace string) error {
 func getNamespaceDefinition(namespace string) *corev1.Namespace {
 	return &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Annotations: map[string]string{
-				"oc.openshift.io/command":                 "oc debug",
-				"openshift.io/node-selector":              "",
-				"openshift.io/sa.scc.mcs":                 "s0:c26,c25",
-				"openshift.io/sa.scc.supplemental-groups": "1000700000/10000",
-				"openshift.io/sa.scc.uid-range":           "1000700000/10000",
-			},
 			Name: namespace,
 			Labels: map[string]string{
-				"pod-security.kubernetes.io/audit":               "privileged",
-				"pod-security.kubernetes.io/enforce":             "privileged",
-				"pod-security.kubernetes.io/warn":                "privileged",
-				"security.openshift.io/scc.podSecurityLabelSync": "false",
-			},
-		},
-		Spec: corev1.NamespaceSpec{
-			Finalizers: []corev1.FinalizerName{
-				"kubernetes",
+				"pod-security.kubernetes.io/audit":   "privileged",
+				"pod-security.kubernetes.io/enforce": "privileged",
+				"pod-security.kubernetes.io/warn":    "privileged",
 			},
 		},
 	}

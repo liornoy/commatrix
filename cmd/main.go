@@ -82,7 +82,7 @@ func main() {
 	}
 
 	comMatrixFileName := filepath.Join(destDir, fmt.Sprintf("communication-matrix.%s", format))
-	err = os.WriteFile(comMatrixFileName, []byte(string(res)), 0644)
+	err = os.WriteFile(comMatrixFileName, res, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -92,13 +92,13 @@ func main() {
 		panic(err)
 	}
 
-	tcpFile, err := os.OpenFile(path.Join(destDir, "raw-ss-tcp"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	tcpFile, err := os.OpenFile(path.Join(destDir, "raw-ss-tcp"), os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
 	defer tcpFile.Close()
 
-	udpFile, err := os.OpenFile(path.Join(destDir, "raw-ss-udp"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	udpFile, err := os.OpenFile(path.Join(destDir, "raw-ss-udp"), os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}

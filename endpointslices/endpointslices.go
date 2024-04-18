@@ -24,24 +24,21 @@ type EndpointSlicesInfo struct {
 }
 
 func GetIngressEndpointSlicesInfo(cs *client.ClientSet) ([]EndpointSlicesInfo, error) {
-	var (
-		epSlicesList discoveryv1.EndpointSliceList
-		servicesList corev1.ServiceList
-		podsList     corev1.PodList
-	)
-
+	var epSlicesList discoveryv1.EndpointSliceList
 	err := cs.List(context.TODO(), &epSlicesList, &rtclient.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list endpointslices: %w", err)
 	}
 	log.Debugf("amount of EndpointSlices in the cluster: %d", len(epSlicesList.Items))
 
+	var servicesList corev1.ServiceList
 	err = cs.List(context.TODO(), &servicesList, &rtclient.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list services: %w", err)
 	}
 	log.Debugf("amount of Services in the cluster: %d", len(servicesList.Items))
 
+	var podsList corev1.PodList
 	err = cs.List(context.TODO(), &podsList, &rtclient.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods: %w", err)
@@ -79,12 +76,9 @@ func ToComDetails(cs *client.ClientSet, epSlicesInfo []EndpointSlicesInfo) ([]ty
 	return cleanedComDetails, nil
 }
 
-// createEPSliceInfos retrieves lists of EndpointSlices, Services, and Pods from the cluster and generates
+// createEPSliceInfos gets lists of EndpointSlices, Services, and Pods and generates
 // a slice of EndpointSlicesInfo, each representing a distinct service.
 func createEPSliceInfos(epSlicesList *discoveryv1.EndpointSliceList, servicesList *corev1.ServiceList, podsList *corev1.PodList) ([]EndpointSlicesInfo, error) {
-	var service *corev1.Service
-	var pod corev1.Pod
-	var found bool
 	res := make([]EndpointSlicesInfo, 0)
 
 	for _, epSlice := range epSlicesList.Items {
@@ -97,8 +91,12 @@ func createEPSliceInfos(epSlicesList *discoveryv1.EndpointSliceList, servicesLis
 		ownerRef := epSlice.OwnerReferences[0]
 		name := ownerRef.Name
 		namespace := epSlice.Namespace
-		if service, found = getService(name, namespace, servicesList); !found {
+
+		svc := corev1.Service{}
+		if service := getService(name, namespace, servicesList); service == nil {
 			return nil, fmt.Errorf("failed to get service for endpoint %s/%s", epSlice.Namespace, epSlice.Name)
+		} else {
+			svc = *service
 		}
 
 		// Fetch info about the pods behind the endpointslice.
@@ -111,16 +109,17 @@ func createEPSliceInfos(epSlicesList *discoveryv1.EndpointSliceList, servicesLis
 			name := endpoint.TargetRef.Name
 			namespace := endpoint.TargetRef.Namespace
 
-			if pod, found = getPod(name, namespace, podsList); !found {
+			var pod *corev1.Pod
+			if pod = getPod(name, namespace, podsList); pod == nil {
 				log.Warnf("failed to get pod %s/%s for endpoint in EndpointSlice %s. skipping", namespace, name, epSlice.Name)
 				continue
 			}
 
-			pods = append(pods, pod)
+			pods = append(pods, *pod)
 			log.Debugf("Added a new endpointSliceInfo with pods len: %d", len(pods))
 			res = append(res, EndpointSlicesInfo{
 				EndpointSlice: epSlice,
-				Service:       *service,
+				Service:       svc,
 				Pods:          pods,
 			})
 		}
@@ -129,23 +128,23 @@ func createEPSliceInfos(epSlicesList *discoveryv1.EndpointSliceList, servicesLis
 	return res, nil
 }
 
-func getPod(name, namespace string, podsList *corev1.PodList) (corev1.Pod, bool) {
+func getPod(name, namespace string, podsList *corev1.PodList) *corev1.Pod {
 	for _, pod := range podsList.Items {
 		if pod.Name == name && pod.Namespace == namespace {
-			return pod, true
+			return &pod
 		}
 	}
-	return corev1.Pod{}, false
+	return nil
 }
 
-func getService(name, namespace string, serviceList *corev1.ServiceList) (*corev1.Service, bool) {
+func getService(name, namespace string, serviceList *corev1.ServiceList) *corev1.Service {
 	for _, service := range serviceList.Items {
 		if service.Name == name && service.Namespace == namespace {
-			return &service, true
+			return &service
 		}
 	}
 
-	return nil, false
+	return nil
 }
 
 // getEndpointSliceNodeRoles gets endpointslice Info struct and returns which node roles the services are on.
